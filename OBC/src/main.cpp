@@ -1,27 +1,55 @@
 #include <Arduino.h>
 #include <Wire.h>
+#include <TinyGPS.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
 #include <LiquidCrystal_I2C.h>
-byte data_bytes[39];
+
+//ECU data reading settings
 byte ResponseLength = 37;
+byte data_bytes[75];
 byte byte_number;
 byte out_input[4];
 byte send[7];
 byte send_data_bytes[8];
-LiquidCrystal_I2C lcd = LiquidCrystal_I2C(0x27, 16, 2);
+
 int TPS;
 int ADV;
 int VE;
 int AE;
 int IAT;
 int MAP;
+int CLT;
+int DWELL;
+int VOLTAGE;
+int O2;
+int RPM_LB;
+int RPM_HB;
+int AFR_TARG;
+int PW_LB;
+int PW_HB; 
+int RPM;
+int PW;
 
-unsigned long refresh_time = 60;
+//Screen settings
+unsigned long refresh_time = 200;
 unsigned long lastTime = 0;
+unsigned long  last_loop_time = 0;
+unsigned long data_ref_rate =  15;
+LiquidCrystal_I2C lcd = LiquidCrystal_I2C(0x27, 16, 2);
 
-int sensor0 = analogRead(A0);
-int sensor1 = analogRead(A1);
+#define SCREEN_WIDTH 128 // OLED display width, in pixels
+#define SCREEN_HEIGHT 64 // OLED display height, in pixels
+#define OLED_RESET -1 // Reset pin # (or -1 if sharing Arduino reset pin)
+#define OLED_ADDR  0x3C
+Adafruit_SSD1306 OLED1 (SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
-void req_data_r() //Requests all the data available.
+
+//Reading sensor data
+//int sensor0 = analogRead(A0);
+//int sensor1 = analogRead(A1);
+
+void req_data_r() //Sends data request to ECU
 {
   
 
@@ -34,17 +62,45 @@ void req_data_r() //Requests all the data available.
   Serial.write(0x00);         // number of bytes is in 2 bytes. LSB first.
 }
 
-void read_data(byte data[]) //Saves data from temporary array (and prints it for debug..)
+void req_data_A()
 {
-  TPS = (data[25]);
+  Serial.write("A");
+}
+void read_data(byte data[]) //Saves data from temporary array (and prints it for debug..)
+{ 
+  //For "r" method
+  // DWELL = data[1];//varma
+  // MAP = data[2];//varma
+  // IAT = data[4];//varma
+  // CLT = data[5];
+  // VOLTAGE = data[7];//varma
+  // O2 = data[8];//varma
+  // RPM_LB = data[12];
+  // RPM_HB = data[13];
+  // VE = data[16];
+  // AFR_TARG = data[17];
+  // PW_LB = data[18];
+  // PW_HB = data[19];
+  // ADV = data[21];
+  // TPS = data[22];
+  
+  DWELL = data[4];//varma
+  MAP = data[5];//varma
+  IAT = data[7];//varma
+  CLT = data[8];
+  VOLTAGE = data[10];//varma
+  O2 = data[11];//varma
+  RPM_LB = data[15];
+  RPM_HB = data[16];
+  VE = data[19];
+  AFR_TARG = data[20];
+  PW_LB = data[21];
+  PW_HB = data[22];
   ADV = data[24];
-  VE = data[17];
-  AE = data[15];
-  IAT = data[6];
-  MAP = data[2];
-  
-  
-  
+  TPS = data[25];
+
+  RPM = word(data[16],data[15]);
+  PW = word(data[21],data[22]);
 }
 
 void setup()
@@ -54,6 +110,11 @@ void setup()
   lcd.begin(16, 2); //set display size
   lcd.print("Lcd-intialized");
   Serial.begin(115200); //Start serial
+
+  OLED1.begin(SSD1306_SWITCHCAPVCC, OLED_ADDR);
+  OLED1.clearDisplay();
+   OLED1.print("TOIMII!!");
+
   delay(2000);
   lcd.clear();
 }
@@ -78,7 +139,7 @@ void save_data()
     }
    */ 
 
-    if (data_bytes[0] == 114) //Check if the data array is saved correctly
+    if (data_bytes[0] == 0x41) //Check if the data array is saved correctly
     {
             read_data(data_bytes); //Calls function to process data
     }
@@ -116,44 +177,62 @@ void send_data(int val, int location)
 
 void read_sensors()
 {
-  sensor0 = analogRead(A0);
-  sensor1 = analogRead(A1);
+  //sensor0 = analogRead(A0);
+  //sensor1 = analogRead(A1);
 }
   
 void display(int location)
 {
   lcd.clear();
+  lcd.print("RPM:");
+  lcd.print(RPM);
+  lcd.setCursor(7,0);
+  lcd.print(" ");
   lcd.print("MAP: ");
   lcd.print(MAP);
-  lcd.print(" ");
-  lcd.print("TPS :");
-  lcd.print(TPS);
+  lcd.setCursor(0,1);
+  lcd.print("PW:");
+  lcd.print(PW);
+  lcd.setCursor(7,1);
+  lcd.print(" CLT: ");
+  lcd.print(CLT);
+  
+
 }
 
 
 void loop()
 { 
-  read_sensors();
   unsigned long currentTime = millis();
-
-  if (Serial.available()>0)
+  
+  
+  //Read sensor data
+  //read_sensors();
+  //Start timer
+  
+  //Send sensor data
+ // if (Serial.available()>0)
   {
-    send_data(sensor0, 0);
-    send_data(sensor0,1);
+    //send_data(sensor0, 0);
+    //delay(2);
+    //send_data(sensor0,1);
+    //delay(2);
   }
-  req_data_r();
-  delay(10);        //No idea why this has to be here??!
+  req_data_A();
+  delay(20);           //No idea why, but this has to be here??!
   save_data();
-  
-  
-  
-  
+  Serial.flush();
+  //Update screen
   if(currentTime-lastTime>refresh_time)
-  {
+  { 
+    {
     display(0x27);
-    lastTime=currentTime;
+   
+    }
+  lastTime=currentTime;
   }
- 
+  last_loop_time=currentTime;
+  
  
 }
 

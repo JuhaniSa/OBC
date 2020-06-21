@@ -1,5 +1,5 @@
-#ifndef Morse_h
-#define Morse_h
+#ifndef Menu_h
+#define Menu_h
 #include <Arduino.h>
 
 class Menu
